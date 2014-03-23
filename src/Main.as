@@ -48,6 +48,7 @@ public class Main extends Sprite
     stage.align = StageAlign.TOP_LEFT;
 
     _video = new Video();
+    _video.smoothing = true;
     addChild(_video);
 
     _overlay = new VideoOverlay();
