@@ -393,6 +393,7 @@ import flash.events.MouseEvent;
 import flash.text.TextField;
 import flash.text.TextFieldType;
 import flash.text.TextFieldAutoSize;
+import flash.text.TextFormat;
 import flash.net.NetStream;
 import flash.net.NetStreamInfo;
 import flash.ui.Keyboard;
@@ -941,10 +942,16 @@ class PlayPauseButton extends Button
 class StatusDisplay extends Control
 {
   private var _text:TextField;
+  private var _textformat:TextFormat
+  [Embed(source="../slkscr.ttf", fontName="silkscreen", fontFamily="silkscreend", mimeType = "application/x-font", advancedAntiAliasing="true", embedAsCFF= "false")]
+  private var sikscreenFont:Class;
 
   public function StatusDisplay()
   {
     _text = new TextField();
+    _textformat = new TextFormat("silkscreen", 16);
+    _text.defaultTextFormat = _textformat;
+    _text.embedFonts = true;
     _text.selectable = false;
     addChild(_text);
   }
