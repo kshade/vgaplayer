@@ -38,7 +38,8 @@ public class Main extends Sprite
   private var _connection:NetConnection;
   private var _stream:NetStream;
   private var _videosize:Point;
-  private var _started:Boolean;
+  private var _videoduration:Number;
+  private var _playing:Boolean;
 
   // Main()
   public function Main()
@@ -51,7 +52,11 @@ public class Main extends Sprite
     stage.align = StageAlign.TOP_LEFT;
 
     _video = new Video();
+<<<<<<< HEAD
     _video.smoothing = true;
+=======
+    _video.smoothing = _params.smoothing;
+>>>>>>> upstream/master
     addChild(_video);
 
     if (_params.imageUrl != null) {
@@ -67,9 +72,9 @@ public class Main extends Sprite
     addChild(_overlay);
 
     _control = new ControlBar(_params.fullscreen);
-    _control.status.bgColor = _params.buttonBgColor;
-    _control.status.fgColor = _params.buttonFgColor;
-    _control.status.hiColor = _params.buttonHiColor;
+    _control.statusDisplay.bgColor = _params.buttonBgColor;
+    _control.statusDisplay.fgColor = _params.buttonFgColor;
+    _control.statusDisplay.hiColor = _params.buttonHiColor;
     _control.playButton.bgColor = _params.buttonBgColor;
     _control.playButton.fgColor = _params.buttonFgColor;
     _control.playButton.hiColor = _params.buttonHiColor;
@@ -80,6 +85,10 @@ public class Main extends Sprite
     _control.volumeSlider.hiColor = _params.buttonHiColor;
     _control.volumeSlider.addEventListener(Slider.CLICK, onVolumeSliderClick);
     _control.volumeSlider.addEventListener(Slider.CHANGED, onVolumeSliderChanged);
+    _control.seekBar.bgColor = _params.buttonBgColor;
+    _control.seekBar.fgColor = _params.buttonFgColor;
+    _control.seekBar.hiColor = _params.buttonHiColor;
+    _control.seekBar.addEventListener(Slider.CHANGED, onSeekBarChanged);
     if (_control.fsButton != null) {
       _control.fsButton.bgColor = _params.buttonBgColor;
       _control.fsButton.fgColor = _params.buttonFgColor;
@@ -97,6 +106,8 @@ public class Main extends Sprite
     stage.addEventListener(Event.RESIZE, onResize);
     stage.addEventListener(Event.ENTER_FRAME, onEnterFrame);
     stage.addEventListener(FullScreenEvent.FULL_SCREEN, onFullScreen);
+    stage.addEventListener(MouseEvent.MOUSE_DOWN, onMouseDown);
+    stage.addEventListener(MouseEvent.MOUSE_UP, onMouseUp);
     stage.addEventListener(MouseEvent.MOUSE_MOVE, onMouseMove);
     stage.addEventListener(KeyboardEvent.KEY_DOWN, onKeyDown);
     resize();
@@ -154,6 +165,14 @@ public class Main extends Sprite
     update();
   }
 
+  private function onMouseDown(e:MouseEvent):void 
+  {
+    _control.show();
+  }
+  private function onMouseUp(e:MouseEvent):void 
+  {
+    _control.show();
+  }
   private function onMouseMove(e:MouseEvent):void 
   {
     _control.show();
@@ -167,7 +186,8 @@ public class Main extends Sprite
       _debugdisp.visible = !_debugdisp.visible;
       break;
     case Keyboard.SPACE:
-      setPlayState(!_started);
+      setPlayState(!_playing);
+      _control.show();
       break;
     }
   }
@@ -180,7 +200,7 @@ public class Main extends Sprite
     case "NetConnection.Connect.Rejected":
     case "NetConnection.Connect.InvalidApp":
       _control.autohide = false;
-      _control.status.text = "Failed";
+      _control.statusDisplay.text = "Failed";
       break;
       
     case "NetConnection.Connect.Success":
@@ -198,47 +218,52 @@ public class Main extends Sprite
       _video.attachNetStream(_stream);
       _updateVolume(_control.volumeSlider);
       _control.autohide = false;
-      _control.status.text = "Connected";
-      _started = false;
-      startPlaying();
+      _control.statusDisplay.text = "Connected";
+      _playing = false;
+      startPlaying(_params.start);
       break;
 
     case "NetConnection.Connect.Closed":
       stopPlaying();
-      _started = false;
+      _playing = false;
       _video.attachNetStream(null);
       _stream.removeEventListener(NetStatusEvent.NET_STATUS, onNetStatusEvent);
       _stream.removeEventListener(AsyncErrorEvent.ASYNC_ERROR, onAsyncErrorEvent);
       _stream.client = null;
       _stream = null;
       _control.autohide = false;
-      _control.status.text = "Disconnected";
+      _control.statusDisplay.text = "Disconnected";
       break;
 
     case "NetStream.Play.Start":
-      _started = true;
+      _playing = false;
       _control.autohide = false;
       _control.playButton.toPlay = false;
-      _control.status.text = "Buffering...";
+      _control.statusDisplay.text = "Buffering...";
+      _updateStatus();
       break;
 
     case "NetStream.Play.Stop":
     case "NetStream.Play.Complete":
     case "NetStream.Buffer.Flush":
-      _started = false;
+      _playing = false;
       _control.autohide = false;
       _control.playButton.toPlay = true;
-      _control.status.text = "Stopped";
+      _control.statusDisplay.text = "Stopped";
+      _updateStatus();
       break;
 
     case "NetStream.Buffer.Empty":
+      _playing = false;
       _control.autohide = false;
-      _control.status.text = "Buffering...";
+      _control.statusDisplay.text = "Buffering...";
       break;
+
     case "NetStream.Buffer.Full":
-      _started = true;
+      _playing = true;
       _control.autohide = true;
-      _control.status.text = "Playing";
+      _control.statusDisplay.text = "Playing";
+      _updateStatus();
       break;
     }
   }
@@ -247,6 +272,8 @@ public class Main extends Sprite
   {
     log("onMetaData:", expandAttrs(info));
     _videosize = new Point(info.width, info.height);
+    _videoduration = info.duration;
+    _updateStatus();
     resize();
   }
 
@@ -268,7 +295,7 @@ public class Main extends Sprite
   private function onOverlayClick(e:MouseEvent):void 
   {  
     var overlay:VideoOverlay = VideoOverlay(e.target);
-    var playing:Boolean = !_started;
+    var playing:Boolean = !_playing;
     overlay.show(playing);
     setPlayState(playing);
   }
@@ -288,6 +315,20 @@ public class Main extends Sprite
     }
   }
 
+  private function _updateStatus():void
+  {
+    if (_playing && 0 < _videoduration) {
+      _control.statusDisplay.visible = false;
+      _control.seekBar.duration = _videoduration;
+      _control.seekBar.visible = true;
+      _control.seekBar.locked = false;
+    } else {
+      _control.statusDisplay.visible = true;
+      _control.seekBar.visible = false;
+      _control.seekBar.locked = false;
+    }
+  }
+
   private function onVolumeSliderClick(e:Event):void
   {
     var slider:VolumeSlider = VolumeSlider(e.target);
@@ -299,6 +340,15 @@ public class Main extends Sprite
   {
     var slider:VolumeSlider = VolumeSlider(e.target);
     _updateVolume(slider);
+  }
+
+  private function onSeekBarChanged(e:Event):void
+  {
+    var seekbar:SeekBar = SeekBar(e.target);
+    seekbar.locked = true;
+    if (_stream != null) {
+      _stream.seek(seekbar.time);
+    }
   }
 
   private function onFullscreenClick(e:Event):void
@@ -313,17 +363,20 @@ public class Main extends Sprite
   {
     if (_params.rtmpURL != null && !_connection.connected) {
       log("Connecting:", _params.rtmpURL);
-      _control.status.text = "Connecting...";
+      _control.statusDisplay.text = "Connecting...";
       _connection.connect(_params.rtmpURL);
     }
   }
 
-  public function startPlaying():void
+  public function startPlaying(start:Number=-1):void
   {
     if (_stream != null && _params.streamPath != null) {
       log("Playing:", _params.streamPath);
-      _control.status.text = "Starting...";
-      _stream.play(_params.streamPath);
+      _control.statusDisplay.text = "Starting...";
+      if (start < 0) {
+	start = _control.seekBar.time;
+      }
+      _stream.play(_params.streamPath, start);
     }
   }
 
@@ -331,7 +384,8 @@ public class Main extends Sprite
   {
     if (_stream != null && _params.streamPath != null) {
       log("Stopping");
-      _control.status.text = "Stopping...";
+      _control.statusDisplay.text = "Stopping...";
+      _playing = false;
       _stream.close();
     }
   }
@@ -340,7 +394,7 @@ public class Main extends Sprite
   {
     log("setPlayState:", playing);
     if (playing) {
-      if (_started) {
+      if (_playing) {
 
       } else if (_connection.connected) {
 	startPlaying();
@@ -348,7 +402,7 @@ public class Main extends Sprite
 	connect();
       }
     } else {
-      if (_started) {
+      if (_playing) {
 	stopPlaying();
       }
     }
@@ -386,8 +440,13 @@ public class Main extends Sprite
   {
     _overlay.update();
     _control.update();
-    if (_debugdisp.visible && _stream != null) {
-      _debugdisp.update(_stream);
+    if (_stream != null) {
+      if (_playing) {
+	_control.seekBar.time = _stream.time;
+      }
+      if (_debugdisp.visible) {
+	_debugdisp.update(_stream);
+      }
     }
   }
 
@@ -422,6 +481,8 @@ class Params
   public var fullscreen:Boolean = false;
   public var rtmpURL:String = null;
   public var streamPath:String = null;
+  public var smoothing:Boolean = false;
+  public var start:Number = 0.0;
 
   public var bgColor:uint = 0x000000;
   public var buttonBgColor:uint = 0x448888ff;
@@ -461,6 +522,14 @@ class Params
       // fullscreen
       if (obj.fullscreen) {
 	fullscreen = (parseInt(obj.fullscreen) != 0);
+      }
+      // smoothing
+      if (obj.smoothing) {
+	smoothing = (parseInt(obj.smoothing) != 0);
+      }
+      // start
+      if (obj.start) {
+	start = parseFloat(obj.start);
       }
 
       // bgColor
@@ -567,12 +636,14 @@ class Control extends Sprite
     if (_mouseover) {
       _mousedown = true;
       _invalidated = true;
+      onMouseDownLocal(e);
     }
   }
 
   protected virtual function onMouseUp(e:MouseEvent):void 
   {
     if (_mousedown) {
+      onMouseUpLocal(e);
       _mousedown = false;
       _invalidated = true;
     }
@@ -588,6 +659,14 @@ class Control extends Sprite
   {
     _mouseover = false;
     _invalidated = true;
+  }
+
+  protected virtual function onMouseDownLocal(e:MouseEvent):void 
+  {
+  }
+
+  protected virtual function onMouseUpLocal(e:MouseEvent):void 
+  {
   }
 
   protected function invalidate():void
@@ -617,6 +696,7 @@ class Control extends Sprite
       repaint();
     }
   }
+
 }
 
 
@@ -656,22 +736,22 @@ class Slider extends Button
   private var _y0:int;
   private var _changing:Boolean;
 
-  protected override function onMouseDown(e:MouseEvent):void 
+  protected override function onMouseDownLocal(e:MouseEvent):void 
   {
-    super.onMouseDown(e);
+    super.onMouseDownLocal(e);
     addEventListener(MouseEvent.MOUSE_MOVE, onMouseMove);
     _x0 = e.localX;
     _y0 = e.localY;
     _changing = false;
   }
 
-  protected override function onMouseUp(e:MouseEvent):void 
+  protected override function onMouseUpLocal(e:MouseEvent):void 
   {
     if (!_changing && pressed) {
       dispatchEvent(new Event(CLICK));
     }
     removeEventListener(MouseEvent.MOUSE_MOVE, onMouseMove);
-    super.onMouseUp(e);
+    super.onMouseUpLocal(e);
   }
 
   protected virtual function onMouseMove(e:MouseEvent):void 
@@ -700,9 +780,10 @@ class ControlBar extends Sprite
   public var margin:int = 4;
   public var fadeDuration:int = 1000;
 
-  public var status:StatusDisplay;
+  public var statusDisplay:StatusDisplay;
   public var playButton:PlayPauseButton;
   public var volumeSlider:VolumeSlider;
+  public var seekBar:SeekBar;
   public var fsButton:FullscreenButton;
 
   private var _autohide:Boolean;
@@ -720,13 +801,17 @@ class ControlBar extends Sprite
     volumeSlider.value = 1.0;
     addChild(volumeSlider);
 
+    seekBar = new SeekBar();
+    seekBar.visible = false;
+    addChild(seekBar);
+    
     if (fullscreen) {
       fsButton = new FullscreenButton();
       addChild(fsButton);
     }
 
-    status = new StatusDisplay();
-    addChild(status);
+    statusDisplay = new StatusDisplay();
+    addChild(statusDisplay);
   }
 
   public function get autohide():Boolean
@@ -773,9 +858,13 @@ class ControlBar extends Sprite
     volumeSlider.y = margin;
     x1 = volumeSlider.x - margin;
     
-    status.resize(x1-x0, size);
-    status.x = x0;
-    status.y = margin;
+    seekBar.resize(x1-x0, size);
+    seekBar.x = x0;
+    seekBar.y = margin;
+
+    statusDisplay.resize(x1-x0, size);
+    statusDisplay.x = x0;
+    statusDisplay.y = margin;
   }
 
   public function update():void
@@ -786,9 +875,10 @@ class ControlBar extends Sprite
     } else {
       alpha = 1.0;
     }
-    status.update();
     playButton.update();
     volumeSlider.update();
+    seekBar.update();
+    statusDisplay.update();
     if (fsButton != null) {
       fsButton.update();
     }
@@ -808,9 +898,11 @@ class VolumeSlider extends Slider
   
   protected override function onMouseDrag(e:MouseEvent):void 
   {
+    super.onMouseDrag(e);
     var size:int = buttonSize/8;
     var w:int = (width-size*2);
     value = (e.localX-size)/w;
+    dispatchEvent(new Event(CHANGED));
   }
 
   public function get value():Number
@@ -824,7 +916,6 @@ class VolumeSlider extends Slider
     if (_value != v) {
       _value = v;
       invalidate();
-      dispatchEvent(new Event(CHANGED));
     }
   }
 
@@ -866,6 +957,98 @@ class VolumeSlider extends Slider
       graphics.moveTo(cx-size, cy-size);
       graphics.lineTo(cx+size, cy+size);
     }
+  }
+}
+
+
+//  SeekBar
+//  A horizontal seek bar.  (part of ControlBar)
+//
+class SeekBar extends Slider
+{
+  public var margin:int = 4;
+  public var barSize:int = 2;
+
+  private var _duration:Number = 0;
+  private var _locked:Boolean = false;
+  private var _time:Number = 0;
+  private var _goal:Number = 0;
+  
+  protected override function onMouseDownLocal(e:MouseEvent):void 
+  {
+    super.onMouseDownLocal(e);
+    updateGoal(e.localX);
+  }
+
+  protected override function onMouseDrag(e:MouseEvent):void 
+  {
+    super.onMouseDrag(e);
+    updateGoal(e.localX);
+  }
+
+  protected override function onMouseUpLocal(e:MouseEvent):void 
+  {
+    super.onMouseUpLocal(e);
+    dispatchEvent(new Event(CHANGED));
+  }
+
+  private function updateGoal(x:int):void
+  {
+    var w:int = (width-margin*2);
+    var v:Number = (x-margin)/w;
+    _goal = Math.max(0, Math.min(1, v));
+    invalidate();
+  }
+
+  public function get duration():Number
+  {
+    return _duration;
+  }
+
+  public function set duration(v:Number):void
+  {
+    _duration = v;
+    invalidate();
+  }
+
+  public function get locked():Boolean
+  {
+    return _locked;
+  }
+
+  public function set locked(v:Boolean):void
+  {
+    _locked = v;
+    invalidate();
+  }
+
+  public function set time(v:Number):void
+  {
+    if (0 < duration) {
+      _time = v / duration;
+      invalidate();
+    }
+  }
+
+  public function get time():Number
+  {
+    var v:Number = (_locked)? _goal : _time;
+    return (v * duration);
+  }
+
+  public override function repaint():void
+  {
+    super.repaint();
+    var size:int = barSize;
+    var color:uint = (highlit)? hiColor : fgColor;
+    var value:Number = (_locked)? _goal : _time;
+
+    var w:int = (width-margin*2);
+    var h:int = (height-margin*2);
+    graphics.beginFill(color, (color>>>24)/255);
+    graphics.drawRect(margin, (height-size)/2, w, size);
+    graphics.drawRect(margin+value*w-size, margin, size*2, h);
+    graphics.endFill();
   }
 }
 
@@ -1083,26 +1266,28 @@ class DebugDisplay extends Sprite
     _logger.multiline = true;
     _logger.wordWrap = true;
     _logger.border = true;
-    _logger.width = 400;
-    _logger.height = 100;
     _logger.background = true;
     _logger.type = TextFieldType.DYNAMIC;
+    _logger.width = 400;
+    _logger.height = 100;
     addChild(_logger);
 
     _playstat = new TextField();
     _playstat.multiline = true;
-    _playstat.width = 200;
-    _playstat.height = 100;
     _playstat.textColor = 0xffffff;
     _playstat.type = TextFieldType.DYNAMIC;
+    _playstat.text = "\n\n\n\n\n";
+    _playstat.width = 200;
+    _playstat.height = _playstat.textHeight+1;
     addChild(_playstat);
 
     _streaminfo = new TextField();
     _streaminfo.multiline = true;
-    _streaminfo.width = 200;
-    _streaminfo.height = 200;
     _streaminfo.textColor = 0xffff00;
     _streaminfo.type = TextFieldType.DYNAMIC;
+    _streaminfo.text = "\n\n\n\n\n\n\n\n\n\n";
+    _streaminfo.width = 200;
+    _streaminfo.height = _streaminfo.textHeight+1;
     addChild(_streaminfo);
   }
 
@@ -1137,7 +1322,7 @@ class DebugDisplay extends Sprite
 	    "byteCount: "+info.byteCount+"\n"+
 	    "audioBufferLength: "+info.audioBufferLength+"\n"+
 	    "videoBufferLength: "+info.videoBufferLength+"\n"+
-		"currentBytesPerSecond: "+Math.floor(info.currentBytesPerSecond)+"\n"+
+	    "currentBytesPerSecond: "+Math.floor(info.currentBytesPerSecond)+"\n"+
 	    "maxBytesPerSecond: "+Math.floor(info.maxBytesPerSecond)+"\n"+
 	    "audioBytesPerSecond: "+Math.floor(info.audioBytesPerSecond)+"\n"+
 	    "videoBytesPerSecond: "+Math.floor(info.videoBytesPerSecond)+"\n"+
